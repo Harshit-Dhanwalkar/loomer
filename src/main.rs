@@ -78,13 +78,13 @@ fn main() {
         .vsync()
         .build();
 
-    let mut magnifier_shader = rl.load_shader(&thread, None, Some("../shader/magnifier.fs"));
+    let mut magnifier_shader = rl.load_shader(&thread, None, Some("shader/magnifier.fs"));
 
-    // let center_loc = magnifier_shader.get_shader_location("center");
-    // let radius_loc = magnifier_shader.get_shader_location("radius");
-    // let texture_width_loc = magnifier_shader.get_shader_location("textureWidth");
-    // let texture_height_loc = magnifier_shader.get_shader_location("textureHeight");
-    // let col_diffuse_loc = magnifier_shader.get_shader_location("colDiffuse");
+    let center_loc = magnifier_shader.get_shader_location("center");
+    let radius_loc = magnifier_shader.get_shader_location("radius");
+    let texture_width_loc = magnifier_shader.get_shader_location("textureWidth");
+    let texture_height_loc = magnifier_shader.get_shader_location("textureHeight");
+    let col_diffuse_loc = magnifier_shader.get_shader_location("colDiffuse");
 
     let screenshot_texture = rl
         .load_texture_from_image(&thread, &screenshot_image)
@@ -150,11 +150,11 @@ fn main() {
             velocity -= velocity * rl.get_frame_time() * 6.0;
         }
 
-        // magnifier_shader.set_shader_value(center_loc, [mouse_pos.x, mouse_pos.y]);
-        // magnifier_shader.set_shader_value(radius_loc, radius);
-        // magnifier_shader.set_shader_value(texture_width_loc, width as f32);
-        // magnifier_shader.set_shader_value(texture_height_loc, height as f32);
-        // magnifier_shader.set_shader_value(col_diffuse_loc, [1.0, 1.0, 1.0, 1.0]);
+        magnifier_shader.set_shader_value(center_loc, [mouse_pos.x, mouse_pos.y]);
+        magnifier_shader.set_shader_value(radius_loc, radius);
+        magnifier_shader.set_shader_value(texture_width_loc, width as f32);
+        magnifier_shader.set_shader_value(texture_height_loc, height as f32);
+        magnifier_shader.set_shader_value(col_diffuse_loc, [1.0, 1.0, 1.0, 1.0]);
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(SPOTLIGHT_TINT);

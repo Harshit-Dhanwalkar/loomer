@@ -39,6 +39,7 @@ void main()
         // Apply magnification
         vec2 magnifiedCoord = (screenCoord - center) / currentMagnification + center;
         vec2 magnifiedTexCoord = magnifiedCoord / vec2(textureWidth, textureHeight);
+        vec2 zoomedOutCoord = (screenCoord - center) * (1.0 / currentMagnification) + center;
         
         texelColor = texture(texture0, magnifiedTexCoord);
     } else {
