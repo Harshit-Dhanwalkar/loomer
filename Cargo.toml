@@ -1,0 +1,9 @@
+[package]
+name = "loomer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libwayshot = "0.3.0"
+raylib = "5.5.1"
+image = "0.25.1"
