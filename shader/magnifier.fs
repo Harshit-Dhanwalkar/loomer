@@ -26,7 +26,7 @@ void main()
     float dist = distance(screenCoord, center);
 
     // Magnification factor
-    float magnification = 2.0;
+    float magnification = 1.2;
     
     vec4 texelColor;
 

@@ -150,7 +150,8 @@ fn main() {
             velocity -= velocity * rl.get_frame_time() * 6.0;
         }
 
-        magnifier_shader.set_shader_value(center_loc, [mouse_pos.x, mouse_pos.y]);
+        let world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
+        magnifier_shader.set_shader_value(center_loc, [world_mouse_pos.x, world_mouse_pos.y]);
         magnifier_shader.set_shader_value(radius_loc, radius);
         magnifier_shader.set_shader_value(texture_width_loc, width as f32);
         magnifier_shader.set_shader_value(texture_height_loc, height as f32);
