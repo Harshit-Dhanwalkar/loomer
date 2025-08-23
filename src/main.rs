@@ -2,10 +2,6 @@ use image::{ImageBuffer, Rgba};
 use libwayshot::{CaptureRegion, WayshotConnection};
 use raylib::prelude::*;
 use std::{env, fs::File, io::Write, process};
-// use raylib::{
-//     ffi::{Image as FfiImage, SetWindowMonitor, ToggleFullscreen},
-//     prelude::*,
-// };
 
 const SPOTLIGHT_TINT: Color = Color::new(0x00, 0x00, 0x00, 190);
 
@@ -60,36 +56,17 @@ fn main() {
     let width = screenshot_buffer.width();
     let height = screenshot_buffer.height();
 
-    // let rgba_data = screenshot_buffer.as_raw();
     let rgba_data = screenshot_buffer.into_raw();
 
     let temp_path = "/tmp/screenshot.raw";
     let mut file = File::create(&temp_path).expect("Failed to create temp file");
     file.write_all(&rgba_data).expect("Failed to write data");
 
-    // let screenshot_image = unsafe {
-    //     let colors: Vec<Color> = rgba_data
-    //         .chunks_exact(4)
-    //         .map(|chunk| Color::new(chunk[0], chunk[1], chunk[2], chunk[3]))
-    //         .collect();
-    //
-    //     // Leak the vector to prevent it from being freed
-    //     let colors_box = colors.into_boxed_slice();
-    //     let colors_ptr = Box::into_raw(colors_box);
-    //
-    //     Image::from_raw(
-    //         colors_ptr as *mut raylib::ffi::Color,
-    //         width as i32,
-    //         height as i32,
-    //     )
-    // };
     let img = ImageBuffer::<Rgba<u8>, _>::from_raw(width as u32, height as u32, rgba_data)
         .expect("Failed to create image buffer");
 
-    // Save as PNG
     img.save("/tmp/screenshot.png").expect("Failed to save PNG");
 
-    // Load with raylib
     let screenshot_image =
         Image::load_image("/tmp/screenshot.png").expect("Failed to load screenshot");
 
@@ -101,6 +78,14 @@ fn main() {
         .vsync()
         .build();
 
+    let mut magnifier_shader = rl.load_shader(&thread, None, Some("../shader/magnifier.fs"));
+
+    // let center_loc = magnifier_shader.get_shader_location("center");
+    // let radius_loc = magnifier_shader.get_shader_location("radius");
+    // let texture_width_loc = magnifier_shader.get_shader_location("textureWidth");
+    // let texture_height_loc = magnifier_shader.get_shader_location("textureHeight");
+    // let col_diffuse_loc = magnifier_shader.get_shader_location("colDiffuse");
+
     let screenshot_texture = rl
         .load_texture_from_image(&thread, &screenshot_image)
         .expect("failed to load screenshot into a texture");
@@ -109,15 +94,15 @@ fn main() {
 
     let mut rl_camera = Camera2D::default();
     rl_camera.zoom = 1.0;
-    rl_camera.target = Vector2::new(0.0, 0.0); // Start at top-left corner
+    rl_camera.target = Vector2::new(0.0, 0.0);
 
     let mut delta_scale = 0f64;
     let mut scale_pivot = rl.get_mouse_position();
     let mut velocity = Vector2::default();
-    let mut spotlight_radius_multiplier = 1.0;
-    let mut spotlight_radius_multiplier_delta = 0.0;
-
+    let mut magnification = 2.0;
+    let mut radius = 100.0;
     let mut should_exit = false;
+
     while !rl.window_should_close() && !should_exit {
         if rl.is_key_pressed(KeyboardKey::KEY_Q) {
             should_exit = true;
@@ -126,33 +111,22 @@ fn main() {
             break;
         }
 
-        let enable_spotlight = rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
-            || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL);
-
+        let mouse_pos = rl.get_mouse_position();
         let scrolled_amount = rl.get_mouse_wheel_move_v().y;
 
-        if rl.is_key_pressed(KeyboardKey::KEY_LEFT_CONTROL)
-            || rl.is_key_pressed(KeyboardKey::KEY_RIGHT_CONTROL)
-        {
-            spotlight_radius_multiplier = 5.0;
-            spotlight_radius_multiplier_delta = -15.0;
-        }
-
         if scrolled_amount != 0.0 {
-            match (
-                enable_spotlight,
-                rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
-                    || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT),
-            ) {
-                (_, false) => {
-                    delta_scale += scrolled_amount as f64;
-                }
-                (true, true) => {
-                    spotlight_radius_multiplier_delta -= scrolled_amount as f64;
-                }
-                _ => {}
+            if rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+                || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT)
+            {
+                magnification = (magnification + scrolled_amount as f32 * 0.1).clamp(1.0, 5.0);
+            } else if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
+                || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL)
+            {
+                radius = (radius + scrolled_amount as f32 * 10.0).clamp(20.0, 300.0);
+            } else {
+                delta_scale += scrolled_amount as f64;
+                scale_pivot = mouse_pos;
             }
-            scale_pivot = rl.get_mouse_position();
         }
 
         if delta_scale.abs() > 0.5 {
@@ -163,13 +137,6 @@ fn main() {
             rl_camera.target += p0 - p1;
             delta_scale -= delta_scale * rl.get_frame_time() as f64 * 4.0
         }
-
-        spotlight_radius_multiplier = (spotlight_radius_multiplier as f64
-            + spotlight_radius_multiplier_delta * rl.get_frame_time() as f64)
-            .clamp(0.3, 10.0) as f32;
-
-        spotlight_radius_multiplier_delta -=
-            spotlight_radius_multiplier_delta * rl.get_frame_time() as f64 * 4.0;
 
         const VELOCITY_THRESHOLD: f32 = 15.0;
         if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
@@ -183,22 +150,34 @@ fn main() {
             velocity -= velocity * rl.get_frame_time() * 6.0;
         }
 
+        // magnifier_shader.set_shader_value(center_loc, [mouse_pos.x, mouse_pos.y]);
+        // magnifier_shader.set_shader_value(radius_loc, radius);
+        // magnifier_shader.set_shader_value(texture_width_loc, width as f32);
+        // magnifier_shader.set_shader_value(texture_height_loc, height as f32);
+        // magnifier_shader.set_shader_value(col_diffuse_loc, [1.0, 1.0, 1.0, 1.0]);
+
         let mut d = rl.begin_drawing(&thread);
+        d.clear_background(SPOTLIGHT_TINT);
+
         let mut mode2d = d.begin_mode2D(rl_camera);
 
-        if enable_spotlight {
-            mode2d.clear_background(SPOTLIGHT_TINT);
-            mode2d.draw_texture(&screenshot_texture, 0, 0, Color::WHITE);
-        } else {
-            mode2d.clear_background(Color::BLACK);
-            mode2d.draw_texture(&screenshot_texture, 0, 0, Color::WHITE);
+        {
+            let mut _shader_mode = mode2d.begin_shader_mode(&mut magnifier_shader);
+            _shader_mode.draw_texture_pro(
+                &screenshot_texture,
+                Rectangle::new(0.0, 0.0, width as f32, height as f32),
+                Rectangle::new(0.0, 0.0, width as f32, height as f32),
+                Vector2::new(0.0, 0.0),
+                0.0,
+                Color::WHITE,
+            );
         }
     }
 }
 
 fn print_help_and_exit(bin: &str) -> ! {
     eprintln!(
-            "\
+        "\
     {bin}  – Wayland screen-zoom tool
 
     USAGE:
@@ -206,7 +185,7 @@ fn print_help_and_exit(bin: &str) -> ! {
 
     OPTIONS:
         --monitor <name>   Target monitor (Wayland output name); defaults to primary if flag is not provided.",
-            bin = bin
-        );
+        bin = bin
+    );
     process::exit(0);
 }

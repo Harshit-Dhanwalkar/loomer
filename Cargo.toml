@@ -3,6 +3,20 @@ name = "loomer"
 version = "0.1.0"
 edition = "2024"
 
+# [build-dependencies]
+# raylib = "5.5.1"
+#
+# [lib]
+# name = "loomer"
+# path = "src/main.rs"
+#
+# [profile.dev]
+# build-std = ["std"]
+#
+# [[bin]]
+# name = "loomer"
+# path = "src/main.rs"
+
 [dependencies]
 libwayshot = "0.3.0"
 raylib = "5.5.1"
