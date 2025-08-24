@@ -67,6 +67,7 @@ fn main() {
     let texture_height_loc = magnifier_shader.get_shader_location("textureHeight");
     let col_diffuse_loc = magnifier_shader.get_shader_location("colDiffuse");
     let magnification_loc = magnifier_shader.get_shader_location("magnification");
+    let zoom_loc = magnifier_shader.get_shader_location("cameraZoom");
 
     let initial_image = Image::gen_image_color(width, height, Color::BLACK);
     let mut screenshot_texture = rl
@@ -138,13 +139,33 @@ fn main() {
             velocity -= velocity * rl.get_frame_time() * 6.0;
         }
 
-        let world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
+        let mut world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
+        world_mouse_pos.x += capture_region.x_coordinate as f32;
+        world_mouse_pos.y += capture_region.y_coordinate as f32;
+
+        let corrected_mouse_pos = world_mouse_pos - rl_camera.target;
+
         magnifier_shader.set_shader_value(center_loc, [world_mouse_pos.x, world_mouse_pos.y]);
         magnifier_shader.set_shader_value(radius_loc, radius);
         magnifier_shader.set_shader_value(texture_width_loc, width as f32);
         magnifier_shader.set_shader_value(texture_height_loc, height as f32);
         magnifier_shader.set_shader_value(col_diffuse_loc, [1.0, 1.0, 1.0, 1.0]);
         magnifier_shader.set_shader_value(magnification_loc, magnification);
+        magnifier_shader.set_shader_value(zoom_loc, rl_camera.zoom);
+
+        // DEBUG MESSAGES
+        println!("--- DEBUG ---");
+        println!("Window Resolution: {}x{}", width, height);
+        println!("Raylib Mouse Position (Screen): {:?}", mouse_pos);
+        println!("Raylib Mouse Position (World): {:?}", world_mouse_pos);
+        println!("Corrected Mouse Position: {:?}", corrected_mouse_pos);
+        println!(
+            "Libwayshot Capture Region (x, y): ({}, {})",
+            capture_region.x_coordinate, capture_region.y_coordinate
+        );
+        println!("Raylib Camera Target: {:?}", rl_camera.target);
+        println!("Raylib Camera Zoom: {:?}", rl_camera.zoom);
+        println!("-------------");
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(SPOTLIGHT_TINT);

@@ -14,6 +14,7 @@ uniform float radius;
 uniform float textureWidth;
 uniform float textureHeight;
 uniform float magnification;
+uniform float cameraZoom;
 
 // Output fragment color
 out vec4 finalColor;
@@ -23,16 +24,19 @@ void main()
     // Convert normalized texture coordinates to screen pixel coordinates
     vec2 screenCoord = fragTexCoord * vec2(textureWidth, textureHeight);
 
+    // Apply the camera zoom to the center coordinates
+    vec2 zoomedCenter = center * cameraZoom;
+
     // Calculate distance from the center of the magnifier
-    float dist = distance(screenCoord, center);
+    float dist = distance(screenCoord, zoomedCenter);
 
     vec4 texelColor;
 
     // Apply magnification only if within the radius
     if (dist < radius) {
-        vec2 centeredCoord = screenCoord - center;
+        vec2 centeredCoord = screenCoord - zoomedCenter;
         vec2 magnifiedCoord = centeredCoord / magnification;
-        vec2 finalCoord = magnifiedCoord + center;
+        vec2 finalCoord = magnifiedCoord + zoomedCenter;
         vec2 magnifiedTexCoord = finalCoord / vec2(textureWidth, textureHeight);
 
         texelColor = texture(texture0, magnifiedTexCoord);
