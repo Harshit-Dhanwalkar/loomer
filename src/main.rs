@@ -1,7 +1,6 @@
-use image::{ImageBuffer, Rgba};
 use libwayshot::{CaptureRegion, WayshotConnection};
 use raylib::prelude::*;
-use std::{env, fs::File, io::Write, process};
+use std::{env, process};
 
 const SPOTLIGHT_TINT: Color = Color::new(0x00, 0x00, 0x00, 190);
 
@@ -49,30 +48,12 @@ fn main() {
         height: geometry.height,
     };
 
-    let screenshot_buffer = wayshot_connection
-        .screenshot(capture_region, false)
-        .expect("failed to take a screenshot");
-
-    let width = screenshot_buffer.width();
-    let height = screenshot_buffer.height();
-
-    let rgba_data = screenshot_buffer.into_raw();
-
-    let temp_path = "/tmp/screenshot.raw";
-    let mut file = File::create(&temp_path).expect("Failed to create temp file");
-    file.write_all(&rgba_data).expect("Failed to write data");
-
-    let img = ImageBuffer::<Rgba<u8>, _>::from_raw(width as u32, height as u32, rgba_data)
-        .expect("Failed to create image buffer");
-
-    img.save("/tmp/screenshot.png").expect("Failed to save PNG");
-
-    let screenshot_image =
-        Image::load_image("/tmp/screenshot.png").expect("Failed to load screenshot");
+    let width = geometry.width;
+    let height = geometry.height;
 
     let (mut rl, thread) = raylib::init()
         .title(env!("CARGO_BIN_NAME"))
-        .size(width as i32, height as i32)
+        .size(width, height)
         .transparent()
         .undecorated()
         .vsync()
@@ -85,12 +66,12 @@ fn main() {
     let texture_width_loc = magnifier_shader.get_shader_location("textureWidth");
     let texture_height_loc = magnifier_shader.get_shader_location("textureHeight");
     let col_diffuse_loc = magnifier_shader.get_shader_location("colDiffuse");
+    let magnification_loc = magnifier_shader.get_shader_location("magnification");
 
-    let screenshot_texture = rl
-        .load_texture_from_image(&thread, &screenshot_image)
-        .expect("failed to load screenshot into a texture");
-
-    std::fs::remove_file(temp_path).ok();
+    let initial_image = Image::gen_image_color(width, height, Color::BLACK);
+    let mut screenshot_texture = rl
+        .load_texture_from_image(&thread, &initial_image)
+        .expect("Failed to create initial texture");
 
     let mut rl_camera = Camera2D::default();
     rl_camera.zoom = 1.0;
@@ -104,6 +85,13 @@ fn main() {
     let mut should_exit = false;
 
     while !rl.window_should_close() && !should_exit {
+        let screenshot_buffer = wayshot_connection
+            .screenshot(capture_region, false)
+            .expect("failed to take a screenshot");
+        let rgba_data = screenshot_buffer.into_raw();
+
+        screenshot_texture.update_texture(&rgba_data);
+
         if rl.is_key_pressed(KeyboardKey::KEY_Q) {
             should_exit = true;
         }
@@ -156,6 +144,7 @@ fn main() {
         magnifier_shader.set_shader_value(texture_width_loc, width as f32);
         magnifier_shader.set_shader_value(texture_height_loc, height as f32);
         magnifier_shader.set_shader_value(col_diffuse_loc, [1.0, 1.0, 1.0, 1.0]);
+        magnifier_shader.set_shader_value(magnification_loc, magnification);
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(SPOTLIGHT_TINT);
