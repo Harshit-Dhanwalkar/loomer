@@ -67,7 +67,8 @@ fn main() {
     let texture_height_loc = magnifier_shader.get_shader_location("textureHeight");
     let col_diffuse_loc = magnifier_shader.get_shader_location("colDiffuse");
     let magnification_loc = magnifier_shader.get_shader_location("magnification");
-    let zoom_loc = magnifier_shader.get_shader_location("cameraZoom");
+    let camera_target_loc = magnifier_shader.get_shader_location("cameraTarget");
+    let camera_zoom_loc = magnifier_shader.get_shader_location("cameraZoom");
 
     let initial_image = Image::gen_image_color(width, height, Color::BLACK);
     let mut screenshot_texture = rl
@@ -139,11 +140,7 @@ fn main() {
             velocity -= velocity * rl.get_frame_time() * 6.0;
         }
 
-        let mut world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
-        world_mouse_pos.x += capture_region.x_coordinate as f32;
-        world_mouse_pos.y += capture_region.y_coordinate as f32;
-
-        let corrected_mouse_pos = world_mouse_pos - rl_camera.target;
+        let world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
 
         magnifier_shader.set_shader_value(center_loc, [world_mouse_pos.x, world_mouse_pos.y]);
         magnifier_shader.set_shader_value(radius_loc, radius);
@@ -151,38 +148,65 @@ fn main() {
         magnifier_shader.set_shader_value(texture_height_loc, height as f32);
         magnifier_shader.set_shader_value(col_diffuse_loc, [1.0, 1.0, 1.0, 1.0]);
         magnifier_shader.set_shader_value(magnification_loc, magnification);
-        magnifier_shader.set_shader_value(zoom_loc, rl_camera.zoom);
-
-        // DEBUG MESSAGES
-        println!("--- DEBUG ---");
-        println!("Window Resolution: {}x{}", width, height);
-        println!("Raylib Mouse Position (Screen): {:?}", mouse_pos);
-        println!("Raylib Mouse Position (World): {:?}", world_mouse_pos);
-        println!("Corrected Mouse Position: {:?}", corrected_mouse_pos);
-        println!(
-            "Libwayshot Capture Region (x, y): ({}, {})",
-            capture_region.x_coordinate, capture_region.y_coordinate
-        );
-        println!("Raylib Camera Target: {:?}", rl_camera.target);
-        println!("Raylib Camera Zoom: {:?}", rl_camera.zoom);
-        println!("-------------");
+        magnifier_shader
+            .set_shader_value(camera_target_loc, [rl_camera.target.x, rl_camera.target.y]);
+        magnifier_shader.set_shader_value(camera_zoom_loc, rl_camera.zoom);
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(SPOTLIGHT_TINT);
 
-        let mut mode2d = d.begin_mode2D(rl_camera);
-
+        // Draw the main screen with the magnifier shader
         {
-            let mut _shader_mode = mode2d.begin_shader_mode(&mut magnifier_shader);
-            _shader_mode.draw_texture_pro(
-                &screenshot_texture,
-                Rectangle::new(0.0, 0.0, width as f32, height as f32),
-                Rectangle::new(0.0, 0.0, width as f32, height as f32),
-                Vector2::new(0.0, 0.0),
-                0.0,
-                Color::WHITE,
-            );
+            let mut mode2d = d.begin_mode2D(rl_camera);
+
+            {
+                let mut _shader_mode = mode2d.begin_shader_mode(&mut magnifier_shader);
+                _shader_mode.draw_texture_pro(
+                    &screenshot_texture,
+                    Rectangle::new(0.0, 0.0, width as f32, height as f32),
+                    Rectangle::new(0.0, 0.0, width as f32, height as f32),
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
         }
+
+        // --- Draw the full screen preview window ---
+        let preview_size = 300.0;
+        let preview_margin = 10.0;
+
+        // Destination rectangle for the corner window
+        let dest_rec = Rectangle::new(
+            (width as f32) - preview_size - preview_margin,
+            preview_margin,
+            preview_size,
+            preview_size,
+        );
+
+        // Draw the background frame and the screenshot
+        d.draw_rectangle_rec(dest_rec, Color::BLACK);
+        d.draw_rectangle_lines_ex(dest_rec, 2.0, Color::WHITE);
+        d.draw_texture_pro(
+            &screenshot_texture,
+            Rectangle::new(0.0, 0.0, width as f32, height as f32),
+            dest_rec,
+            Vector2::new(0.0, 0.0),
+            0.0,
+            Color::WHITE,
+        );
+
+        // Calculate the cursor position on the preview window
+        let cursor_x_scaled = ((mouse_pos.x / width as f32) * preview_size) + dest_rec.x;
+        let cursor_y_scaled = ((mouse_pos.y / height as f32) * preview_size) + dest_rec.y;
+
+        // Draw a small circle at the cursor's position on the preview window
+        d.draw_circle(
+            cursor_x_scaled as i32,
+            cursor_y_scaled as i32,
+            5.0,
+            Color::RED,
+        );
     }
 }
 
