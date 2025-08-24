@@ -1,14 +1,11 @@
 #version 330
 
-// Input vertex attributes (from vertex shader)
 in vec2 fragTexCoord;
 in vec4 fragColor;
 
-// Input uniform values
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 
-// Custom uniforms for magnifier effect
 uniform vec2 center;
 uniform float radius;
 uniform float textureWidth;
@@ -16,7 +13,6 @@ uniform float textureHeight;
 uniform float magnification;
 uniform float cameraZoom;
 
-// Output fragment color
 out vec4 finalColor;
 
 void main()
@@ -24,8 +20,9 @@ void main()
     // Convert normalized texture coordinates to screen pixel coordinates
     vec2 screenCoord = fragTexCoord * vec2(textureWidth, textureHeight);
 
-    // Apply the camera zoom to the center coordinates
-    vec2 zoomedCenter = center * cameraZoom;
+    // Use the center coordinates directly, without multiplying by cameraZoom
+    vec2 zoomedCenter = center;
+    // vec2 zoomedCenter = center * cameraZoom;
 
     // Calculate distance from the center of the magnifier
     float dist = distance(screenCoord, zoomedCenter);
@@ -49,6 +46,6 @@ void main()
     float edgeSmoothness = 2.0;
     float alpha = smoothstep(radius, radius - edgeSmoothness, dist);
 
-    finalColor = mix(vec4(0.0, 0.0, 0.0, 0.75), texelColor, alpha);
+    finalColor = mix(vec4(0.0, 0.0, 0.0, 0.0), texelColor, alpha);
     finalColor = finalColor * colDiffuse;
 }

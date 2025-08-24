@@ -79,8 +79,6 @@ fn main() {
     rl_camera.zoom = 1.0;
     rl_camera.target = Vector2::new(0.0, 0.0);
 
-    let mut delta_scale = 0f64;
-    let mut scale_pivot = rl.get_mouse_position();
     let mut velocity = Vector2::default();
     let mut magnification = 2.0;
     let mut radius = 100.0;
@@ -88,6 +86,9 @@ fn main() {
 
     let preview_size = 300.0;
     let preview_margin = 10.0;
+
+    let mut selecting = false;
+    let mut selection_start = Vector2::new(0.0, 0.0);
 
     while !rl.window_should_close() && !should_exit {
         if rl.is_key_pressed(KeyboardKey::KEY_Q) {
@@ -100,40 +101,68 @@ fn main() {
         let mouse_pos = rl.get_mouse_position();
         let scrolled_amount = rl.get_mouse_wheel_move_v().y;
 
-        if scrolled_amount != 0.0 {
-            if rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
-                || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT)
-            {
-                magnification = (magnification + scrolled_amount as f32 * 0.1).clamp(1.0, 5.0);
-            } else if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
-                || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL)
-            {
-                radius = (radius + scrolled_amount as f32 * 10.0).clamp(20.0, 300.0);
-            } else {
-                delta_scale += scrolled_amount as f64;
-                scale_pivot = mouse_pos;
+        if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+            selecting = true;
+            selection_start = mouse_pos;
+        }
+        if rl.is_mouse_button_released(MouseButton::MOUSE_BUTTON_LEFT) {
+            selecting = false;
+            let selection_end = mouse_pos;
+
+            if selection_start.x != selection_end.x || selection_start.y != selection_end.y {
+                let rect = Rectangle::new(
+                    selection_start.x.min(selection_end.x),
+                    selection_start.y.min(selection_end.y),
+                    (selection_end.x - selection_start.x).abs(),
+                    (selection_end.y - selection_start.y).abs(),
+                );
+
+                let center_x = rect.x + rect.width / 2.0;
+                let center_y = rect.y + rect.height / 2.0;
+
+                rl_camera.target = Vector2::new(center_x, center_y);
+                rl_camera.zoom = (width as f32 / rect.width).min(height as f32 / rect.height);
+
+                magnification = 1.0;
             }
         }
 
-        if delta_scale.abs() > 0.5 {
-            let p0 = scale_pivot / rl_camera.zoom;
-            rl_camera.zoom = (rl_camera.zoom as f64 + delta_scale * rl.get_frame_time() as f64)
-                .clamp(0.1, 10.0) as f32;
-            let p1 = scale_pivot / rl_camera.zoom;
-            rl_camera.target += p0 - p1;
-            delta_scale -= delta_scale * rl.get_frame_time() as f64 * 4.0
-        }
+        if !selecting {
+            if scrolled_amount != 0.0 {
+                if rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+                    || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT)
+                {
+                    magnification = (magnification + scrolled_amount as f32 * 0.1).clamp(1.0, 5.0);
+                    rl_camera.zoom = 1.0;
+                    rl_camera.target = Vector2::new(0.0, 0.0);
+                } else if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
+                    || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL)
+                {
+                    radius = (radius + scrolled_amount as f32 * 10.0).clamp(20.0, 300.0);
+                } else {
+                    magnification = 1.0;
+                    let mouse_world_before_zoom = rl.get_screen_to_world2D(mouse_pos, rl_camera);
+                    let new_zoom = (rl_camera.zoom as f64
+                        + scrolled_amount as f64 * rl.get_frame_time() as f64 * 2.0)
+                        .clamp(0.1, 10.0) as f32;
+                    rl_camera.zoom = new_zoom;
+                    let mouse_world_after_zoom = rl.get_screen_to_world2D(mouse_pos, rl_camera);
+                    rl_camera.target += mouse_world_before_zoom - mouse_world_after_zoom;
+                }
+            }
 
-        const VELOCITY_THRESHOLD: f32 = 15.0;
-        if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_MIDDLE) {
-            let delta = rl
-                .get_screen_to_world2D(rl.get_mouse_position() - rl.get_mouse_delta(), rl_camera)
-                - rl.get_screen_to_world2D(rl.get_mouse_position(), rl_camera);
-            rl_camera.target += delta;
-            velocity = delta * rl.get_fps().as_f32();
-        } else if velocity.length_sqr() > VELOCITY_THRESHOLD * VELOCITY_THRESHOLD {
-            rl_camera.target += velocity * rl.get_frame_time();
-            velocity -= velocity * rl.get_frame_time() * 6.0;
+            const VELOCITY_THRESHOLD: f32 = 15.0;
+            if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_MIDDLE) {
+                let delta = rl.get_screen_to_world2D(
+                    rl.get_mouse_position() - rl.get_mouse_delta(),
+                    rl_camera,
+                ) - rl.get_screen_to_world2D(rl.get_mouse_position(), rl_camera);
+                rl_camera.target += delta;
+                velocity = delta * rl.get_fps().as_f32();
+            } else if velocity.length_sqr() > VELOCITY_THRESHOLD * VELOCITY_THRESHOLD {
+                rl_camera.target += velocity * rl.get_frame_time();
+                velocity -= velocity * rl.get_frame_time() * 6.0;
+            }
         }
 
         if rl.is_key_pressed(KeyboardKey::KEY_SPACE) {
@@ -146,7 +175,6 @@ fn main() {
             .screenshot(capture_region, false)
             .expect("failed to take a screenshot");
         let rgba_data = screenshot_buffer.into_raw();
-
         screenshot_texture.update_texture(&rgba_data);
 
         let world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
@@ -160,23 +188,54 @@ fn main() {
             .set_shader_value(camera_target_loc, [rl_camera.target.x, rl_camera.target.y]);
         magnifier_shader.set_shader_value(camera_zoom_loc, rl_camera.zoom);
 
+        println!("Screen Resolution: {}x{}", width, height);
+        println!(
+            "Cursor Position (Screen): ({}, {})",
+            mouse_pos.x, mouse_pos.y
+        );
+        println!(
+            "Magnifier Center Position (World): ({}, {})",
+            world_mouse_pos.x, world_mouse_pos.y
+        );
+
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(SPOTLIGHT_TINT);
 
-        {
-            let mut mode2d = d.begin_mode2D(rl_camera);
-
+        if !selecting {
             {
-                let mut _shader_mode = mode2d.begin_shader_mode(&mut magnifier_shader);
-                _shader_mode.draw_texture_pro(
+                let mut _mode2d = d.begin_mode2D(rl_camera);
+                {
+                    let mut _shader_mode = _mode2d.begin_shader_mode(&mut magnifier_shader);
+                    _shader_mode.draw_texture_pro(
+                        &screenshot_texture,
+                        Rectangle::new(0.0, 0.0, width as f32, height as f32),
+                        Rectangle::new(0.0, 0.0, width as f32, height as f32),
+                        Vector2::new(0.0, 0.0),
+                        0.0,
+                        Color::WHITE,
+                    );
+                }
+            }
+        } else {
+            {
+                let mut _mode2d = d.begin_mode2D(rl_camera);
+                _mode2d.draw_texture_ex(
                     &screenshot_texture,
-                    Rectangle::new(0.0, 0.0, width as f32, height as f32),
-                    Rectangle::new(0.0, 0.0, width as f32, height as f32),
                     Vector2::new(0.0, 0.0),
                     0.0,
+                    1.0,
                     Color::WHITE,
                 );
             }
+
+            let selection_rect = Rectangle::new(
+                selection_start.x,
+                selection_start.y,
+                mouse_pos.x - selection_start.x,
+                mouse_pos.y - selection_start.y,
+            );
+            d.draw_rectangle_rec(selection_rect, Color::new(255, 255, 255, 128));
+            d.draw_rectangle_lines_ex(selection_rect, 2.0, Color::WHITE);
         }
 
         let dest_rec = if mouse_pos.x > (width as f32 - preview_size - preview_margin)
