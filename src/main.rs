@@ -86,19 +86,15 @@ fn main() {
     let mut radius = 100.0;
     let mut should_exit = false;
 
+    let preview_size = 300.0;
+    let preview_margin = 10.0;
+
     while !rl.window_should_close() && !should_exit {
-        let screenshot_buffer = wayshot_connection
-            .screenshot(capture_region, false)
-            .expect("failed to take a screenshot");
-        let rgba_data = screenshot_buffer.into_raw();
-
-        screenshot_texture.update_texture(&rgba_data);
-
         if rl.is_key_pressed(KeyboardKey::KEY_Q) {
             should_exit = true;
         }
         if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_RIGHT) {
-            break;
+            should_exit = true;
         }
 
         let mouse_pos = rl.get_mouse_position();
@@ -129,7 +125,7 @@ fn main() {
         }
 
         const VELOCITY_THRESHOLD: f32 = 15.0;
-        if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
+        if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_MIDDLE) {
             let delta = rl
                 .get_screen_to_world2D(rl.get_mouse_position() - rl.get_mouse_delta(), rl_camera)
                 - rl.get_screen_to_world2D(rl.get_mouse_position(), rl_camera);
@@ -140,8 +136,20 @@ fn main() {
             velocity -= velocity * rl.get_frame_time() * 6.0;
         }
 
-        let world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
+        if rl.is_key_pressed(KeyboardKey::KEY_SPACE) {
+            rl_camera.zoom = 1.0;
+            rl_camera.target = Vector2::new(0.0, 0.0);
+            magnification = 2.0;
+        }
 
+        let screenshot_buffer = wayshot_connection
+            .screenshot(capture_region, false)
+            .expect("failed to take a screenshot");
+        let rgba_data = screenshot_buffer.into_raw();
+
+        screenshot_texture.update_texture(&rgba_data);
+
+        let world_mouse_pos = rl.get_screen_to_world2D(mouse_pos, rl_camera);
         magnifier_shader.set_shader_value(center_loc, [world_mouse_pos.x, world_mouse_pos.y]);
         magnifier_shader.set_shader_value(radius_loc, radius);
         magnifier_shader.set_shader_value(texture_width_loc, width as f32);
@@ -155,7 +163,6 @@ fn main() {
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(SPOTLIGHT_TINT);
 
-        // Draw the main screen with the magnifier shader
         {
             let mut mode2d = d.begin_mode2D(rl_camera);
 
@@ -172,19 +179,24 @@ fn main() {
             }
         }
 
-        // --- Draw the full screen preview window ---
-        let preview_size = 300.0;
-        let preview_margin = 10.0;
+        let dest_rec = if mouse_pos.x > (width as f32 - preview_size - preview_margin)
+            && mouse_pos.y < (preview_size + preview_margin)
+        {
+            Rectangle::new(
+                (width as f32) - preview_size - preview_margin,
+                (height as f32) - preview_size - preview_margin,
+                preview_size,
+                preview_size,
+            )
+        } else {
+            Rectangle::new(
+                (width as f32) - preview_size - preview_margin,
+                preview_margin,
+                preview_size,
+                preview_size,
+            )
+        };
 
-        // Destination rectangle for the corner window
-        let dest_rec = Rectangle::new(
-            (width as f32) - preview_size - preview_margin,
-            preview_margin,
-            preview_size,
-            preview_size,
-        );
-
-        // Draw the background frame and the screenshot
         d.draw_rectangle_rec(dest_rec, Color::BLACK);
         d.draw_rectangle_lines_ex(dest_rec, 2.0, Color::WHITE);
         d.draw_texture_pro(
@@ -196,11 +208,9 @@ fn main() {
             Color::WHITE,
         );
 
-        // Calculate the cursor position on the preview window
         let cursor_x_scaled = ((mouse_pos.x / width as f32) * preview_size) + dest_rec.x;
         let cursor_y_scaled = ((mouse_pos.y / height as f32) * preview_size) + dest_rec.y;
 
-        // Draw a small circle at the cursor's position on the preview window
         d.draw_circle(
             cursor_x_scaled as i32,
             cursor_y_scaled as i32,
